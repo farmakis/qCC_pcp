@@ -21,7 +21,7 @@
 #include <CutPursuit.h>
 
 
-using namespace CCCoreLib;
+using namespace PCP;
 
 Graph::Graph(int32_t N, GenericIndexedCloudPersist* cloud, DgmOctree* octree)
     : m_cloud(cloud)

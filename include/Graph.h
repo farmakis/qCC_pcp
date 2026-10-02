@@ -43,7 +43,7 @@
 #pragma once
 #include <cstddef>
 
-namespace CCCoreLib
+namespace PCP
 {
     class GenericIndexedCloudPersist;
     class DgmOctree;
