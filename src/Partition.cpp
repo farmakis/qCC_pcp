@@ -4,17 +4,17 @@
 using namespace PCP;
 
 int Partition::labelCutPursuitComponents(CCCoreLib::GenericIndexedCloudPersist* theCloud,
-										int32_t knn,
-										double knnRadius,
-										int32_t N,
-										int32_t D,
-										const std::vector<float>& Y,
-										float regularization,
-										float spatialWeight,
-										int32_t cutoff,
-										std::vector<int32_t>& components,
-										CCCoreLib::GenericProgressCallback* progressCb,
-										CCCoreLib::DgmOctree* theOctree)
+                                         int32_t                                knn,
+                                         double                                 knnRadius,
+                                         int32_t                                N,
+                                         int32_t                                D,
+                                         const std::vector<float>&              Y,
+                                         float                                  regularization,
+                                         float                                  spatialWeight,
+                                         int32_t                                cutoff,
+                                         std::vector<int32_t>&                  components,
+                                         CCCoreLib::GenericProgressCallback*    progressCb,
+                                         CCCoreLib::DgmOctree*                  theOctree)
 {
 	if (nullptr == theCloud)
 	{
@@ -34,15 +34,25 @@ int Partition::labelCutPursuitComponents(CCCoreLib::GenericIndexedCloudPersist* 
 
 	// call cut pursuit
 	auto rV = G.partitionCutPursuit(D,
-									Y,
-									components,
-									regularization,
-									spatialWeight,
-									cutoff,
-									0.01f, 15, 2, 2, 0.7f, 3, 3, 1000,
-									false, true, true, false,
-									-1,
-									progressCb);
+	                                Y,
+	                                components,
+	                                regularization,
+	                                spatialWeight,
+	                                cutoff,
+	                                0.01f,
+	                                15,
+	                                2,
+	                                2,
+	                                0.7f,
+	                                3,
+	                                3,
+	                                1000,
+	                                false,
+	                                true,
+	                                true,
+	                                false,
+	                                -1,
+	                                progressCb);
 
 	return rV;
 }

@@ -44,72 +44,77 @@
 #include <cstddef>
 
 // CCCoreLib
+#include <DgmOctree.h>
 #include <GenericIndexedCloudPersist.h>
 #include <GenericProgressCallback.h>
-#include <DgmOctree.h>
 
 namespace PCP
 {
-    using CCCoreLib::GenericIndexedCloudPersist;
-    using CCCoreLib::DgmOctree;
-    using CCCoreLib::GenericProgressCallback;
+	using CCCoreLib::DgmOctree;
+	using CCCoreLib::GenericIndexedCloudPersist;
+	using CCCoreLib::GenericProgressCallback;
 
-    class Graph
-    {
-    public:
-        // constructor
-        Graph(int32_t N, GenericIndexedCloudPersist* cloud, DgmOctree* octree);
+	class Graph
+	{
+	  public:
+		// constructor
+		Graph(int32_t N, GenericIndexedCloudPersist* cloud, DgmOctree* octree);
 
-        /* return the number of nodes in the graph */
-        int32_t numNodes() const { return m_N; }
-        /* return the number of edges in the graph */
-        size_t numEdges() const { return static_cast<size_t>(m_edges.size() / 2); }
+		/* return the number of nodes in the graph */
+		int32_t numNodes() const
+		{
+			return m_N;
+		}
+		/* return the number of edges in the graph */
+		size_t numEdges() const
+		{
+			return static_cast<size_t>(m_edges.size() / 2);
+		}
 
-        /* compute edges of the graph
-        * knn - number of nearest neighbors
-        * knnRadius - radius for nearest neighbors search
-        * progressCb - progress callback
-        */
-        void computeEdges(int32_t knn, double knnRadius, GenericProgressCallback* progressCb = nullptr);
+		/* compute edges of the graph
+		 * knn - number of nearest neighbors
+		 * knnRadius - radius for nearest neighbors search
+		 * progressCb - progress callback
+		 */
+		void computeEdges(int32_t knn, double knnRadius, GenericProgressCallback* progressCb = nullptr);
 
-        /* convert edge list to forward-star representation */
-        /* adapted from the edge_list_to_forward_star().cpp file of the
-         * grid-graph project by Hugo Raguet (https://github.com/1a7r0ch3/grid-graph) */ 
-        void edgeListToForwardStar(int32_t V, size_t E, const int32_t* edges,
-            int32_t* first_edge, int32_t* reindex);
-        /* first_edge is an array of length V + 1, already allocated;
-        * reindex is the permutation indices so that all edges starting from a
-        * same vertex are consecutive, array of length E, already allocated;
-        * adj_vertices can be thus deduced from the edges by permuting the ending
-        * vertices according to reindex */
+		/* convert edge list to forward-star representation */
+		/* adapted from the edge_list_to_forward_star().cpp file of the
+		 * grid-graph project by Hugo Raguet (https://github.com/1a7r0ch3/grid-graph) */
+		void edgeListToForwardStar(int32_t V, size_t E, const int32_t* edges, int32_t* first_edge, int32_t* reindex);
+		/* first_edge is an array of length V + 1, already allocated;
+		 * reindex is the permutation indices so that all edges starting from a
+		 * same vertex are consecutive, array of length E, already allocated;
+		 * adj_vertices can be thus deduced from the edges by permuting the ending
+		 * vertices according to reindex */
 
-        int partitionCutPursuit(
-            int32_t D,
-            const std::vector<float>& Y,
-            std::vector<int32_t>& components,
-            float regularization,
-            float spatialWeight,
-            int32_t cutoff,
-            float cp_dif_tol = 0.01f,
-            int cp_it_max = 15,
-            int K = 2,
-            int split_iter_num = 2,
-            float split_damp_ratio = 0.7f,
-            int kmpp_init_num = 3,
-            int kmpp_iter_num = 3,
-            int verbose = 1000,
-            int balance_parallel_split = false,
-            int compute_Time = true,
-            int compute_Obj = false,
-            int compute_Dif = false,
-            int max_num_threads = -1,
-            GenericProgressCallback* progressCb = nullptr);
+		int partitionCutPursuit(
+		    int32_t                   D,
+		    const std::vector<float>& Y,
+		    std::vector<int32_t>&     components,
+		    float                     regularization,
+		    float                     spatialWeight,
+		    int32_t                   cutoff,
+		    float                     cp_dif_tol             = 0.01f,
+		    int                       cp_it_max              = 15,
+		    int                       K                      = 2,
+		    int                       split_iter_num         = 2,
+		    float                     split_damp_ratio       = 0.7f,
+		    int                       kmpp_init_num          = 3,
+		    int                       kmpp_iter_num          = 3,
+		    int                       verbose                = 1000,
+		    int                       balance_parallel_split = false,
+		    int                       compute_Time           = true,
+		    int                       compute_Obj            = false,
+		    int                       compute_Dif            = false,
+		    int                       max_num_threads        = -1,
+		    GenericProgressCallback*  progressCb             = nullptr);
 
-    protected:
-        GenericIndexedCloudPersist* m_cloud;
-        DgmOctree* m_octree;
-        int32_t m_N; // number of nodes
-        std::vector<int32_t> m_edges; // edge list representation of the graph
-        std::vector<float> m_distances;
-    };
-}
+	  protected:
+		GenericIndexedCloudPersist* m_cloud;
+		DgmOctree*                  m_octree;
+		int32_t                     m_N;     // number of nodes
+		std::vector<int32_t>        m_edges; // edge list representation of the graph
+		std::vector<float>          m_distances;
+	};
+} // namespace PCP

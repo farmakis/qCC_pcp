@@ -1,14 +1,14 @@
 /*=============================================================================
- * Adapted/integrated by Ioannis Farmakis (2026) from the original 
+ * Adapted/integrated by Ioannis Farmakis (2026) from the original
  * parallel-cut-pursuit project implementation by Hugo Raguet 2018
- * (https://github.com/1a7r0ch3/parallel-cut-pursuit), 2026, for use in 
+ * (https://github.com/1a7r0ch3/parallel-cut-pursuit), 2026, for use in
  * CloudCompare: merged and de-templated from the original cut_pursuit.hpp,
  * cut_pursuit_d0.hpp and cp_d0_dist.hpp to implement the d0 distance only.
  * See the integration notes in CutPursuit.h for full details.
  *===========================================================================*/
-#include <set>
 #include <algorithm>
 #include <random>
+#include <set>
 
 // local
 #include <CutPursuit.h>
@@ -16,8 +16,8 @@
 
 #define ADD1(i) (((size_t)i) + (size_t)1) // avoid overflows
 #define EDGE_WEIGHTS_(e) (edge_weights ? edge_weights[(e)] : homo_edge_weight)
-#define VERT_WEIGHTS_(v) (vert_weights ? vert_weights[(v)] : (float) 1.0)
-#define COOR_WEIGHTS_(d) (coor_weights ? coor_weights[(d)] : (float) 1.0)
+#define VERT_WEIGHTS_(v) (vert_weights ? vert_weights[(v)] : (float)1.0)
+#define COOR_WEIGHTS_(d) (coor_weights ? coor_weights[(d)] : (float)1.0)
 
 /** specific flags **/
 /* enusre number of components do not exceed integer representation */
@@ -34,7 +34,6 @@
 #define NO_EDGE (std::numeric_limits<int32_t>::max())
 #define NOT_ISOLATED (std::numeric_limits<int32_t>::max())
 #define ISOLATED ((int32_t)0)
-
 
 using namespace std;
 
@@ -90,15 +89,15 @@ CP::CP(int32_t V, int32_t E, const int32_t* first_edge, const int32_t* adj_verti
 	max_split_size         = V;
 
 	vert_weights = coor_weights = nullptr;
-    comp_weights = nullptr;
-    merge_gains = nullptr;
-    merge_values = nullptr;
+	comp_weights                = nullptr;
+	merge_gains                 = nullptr;
+	merge_values                = nullptr;
 
-    loss = quadratic_loss();
-    fYY = 0.0;
-    fXY = real_inf();
+	loss = quadratic_loss();
+	fYY  = 0.0;
+	fXY  = real_inf();
 
-    min_comp_weight = 0.0;
+	min_comp_weight = 0.0;
 }
 
 CP::~CP()
@@ -126,15 +125,15 @@ void CP::reset_edges()
 }
 
 void CP::set_edge_weights(const float* edge_weights,
-                              float        homo_edge_weight)
+                          float        homo_edge_weight)
 {
 	this->edge_weights     = edge_weights;
 	this->homo_edge_weight = homo_edge_weight;
 }
 
-void CP::set_monitoring_arrays(float* objective_values,
-                                   double* elapsed_time,
-                                   float* iterate_evolution)
+void CP::set_monitoring_arrays(float*  objective_values,
+                               double* elapsed_time,
+                               float*  iterate_evolution)
 {
 	this->objective_values  = objective_values;
 	this->elapsed_time      = elapsed_time;
@@ -143,63 +142,82 @@ void CP::set_monitoring_arrays(float* objective_values,
 
 float CP::distance(const float* Yv, const float* Xv) const
 {
-    float dist = 0.0;
-    size_t Q = loss; // number of coordinates for quadratic part
-    if (Q != 0){ /* quadratic part */
-        for (size_t d = 0; d < Q; d++){
-            dist += COOR_WEIGHTS_(d)*(Yv[d] - Xv[d])*(Yv[d] - Xv[d]);
-        }
-    }
-    if (Q != D){ /* smoothed Kullback-Leibler;
-                    just compute cross-entropy here */
-        float distKL = 0.0;
-        const float s = loss < 1.0 ? loss : eps;
-        const float c = 1.0 - s;
-        const float u = s/(D - Q);
-        for (size_t d = Q; d < D; d++){
-            distKL -= (u + c*Yv[d])*log(u + c*Xv[d]);
-        }
-        dist += COOR_WEIGHTS_(Q)*distKL;
-    }
-    return dist;
+	float  dist = 0.0;
+	size_t Q    = loss; // number of coordinates for quadratic part
+	if (Q != 0)
+	{ /* quadratic part */
+		for (size_t d = 0; d < Q; d++)
+		{
+			dist += COOR_WEIGHTS_(d) * (Yv[d] - Xv[d]) * (Yv[d] - Xv[d]);
+		}
+	}
+	if (Q != D)
+	{ /* smoothed Kullback-Leibler;
+		 just compute cross-entropy here */
+		float       distKL = 0.0;
+		const float s      = loss < 1.0 ? loss : eps;
+		const float c      = 1.0 - s;
+		const float u      = s / (D - Q);
+		for (size_t d = Q; d < D; d++)
+		{
+			distKL -= (u + c * Yv[d]) * log(u + c * Xv[d]);
+		}
+		dist += COOR_WEIGHTS_(Q) * distKL;
+	}
+	return dist;
 }
 
-void CP::set_loss(float loss, const float* Y,
-    const float* vert_weights, const float* coor_weights)
+void CP::set_loss(float loss, const float* Y, const float* vert_weights, const float* coor_weights)
 {
-    if (loss < 0.0 || (loss > 1.0 && ((size_t) loss) != loss) || loss > D){
-        cerr << "Cut-pursuit d0 distance: loss parameter should be positive,"
-            "either in (0,1) or an integer that do not exceed the dimension "
-            "(" << loss << " given)." << endl;
-        exit(EXIT_FAILURE);
-    }
-    if (loss == 0.0){ loss = eps; } // avoid singularities
-    this->loss = loss;
-    if (Y){ this->Y = Y; }
-    this->vert_weights = vert_weights;
-    if (0.0 < loss && loss < 1.0 && coor_weights){
-        cerr << "Cut-pursuit d0 distance: no sense in weighting coordinates of"
-            " the probability space in Kullback-Leibler divergence." << endl;
-        exit(EXIT_FAILURE);
-    }
-    this->coor_weights = coor_weights;
-    if (loss == quadratic_loss()){ fYY = 0.0; return; }
-    /* recompute the constant dist(Y, Y) for Kullback-Leibler */
-    const size_t Q = loss; // number of coordinates for quadratic part
-    const float s = loss < 1.0 ? loss : eps;
-    const float c = 1.0 - s;
-    const float u = s/(D - Q);
-    float fYY_par = 0.0; // auxiliary variable for parallel region
+	if (loss < 0.0 || (loss > 1.0 && ((size_t)loss) != loss) || loss > D)
+	{
+		cerr << "Cut-pursuit d0 distance: loss parameter should be positive,"
+		        "either in (0,1) or an integer that do not exceed the dimension "
+		        "("
+		     << loss << " given)." << endl;
+		exit(EXIT_FAILURE);
+	}
+	if (loss == 0.0)
+	{
+		loss = eps;
+	} // avoid singularities
+	this->loss = loss;
+	if (Y)
+	{
+		this->Y = Y;
+	}
+	this->vert_weights = vert_weights;
+	if (0.0 < loss && loss < 1.0 && coor_weights)
+	{
+		cerr << "Cut-pursuit d0 distance: no sense in weighting coordinates of"
+		        " the probability space in Kullback-Leibler divergence."
+		     << endl;
+		exit(EXIT_FAILURE);
+	}
+	this->coor_weights = coor_weights;
+	if (loss == quadratic_loss())
+	{
+		fYY = 0.0;
+		return;
+	}
+	/* recompute the constant dist(Y, Y) for Kullback-Leibler */
+	const size_t Q       = loss; // number of coordinates for quadratic part
+	const float  s       = loss < 1.0 ? loss : eps;
+	const float  c       = 1.0 - s;
+	const float  u       = s / (D - Q);
+	float        fYY_par = 0.0; // auxiliary variable for parallel region
 
-    for (int32_t v = 0; v < V; v++){
-        const float* Yv = Y + D*v;
-        float H_Yv = 0.0;
-        for (size_t d = Q; d < D; d++){
-            H_Yv -= (u + c*Yv[d])*log(u + c*Yv[d]);
-        }
-        fYY_par += VERT_WEIGHTS_(v)*H_Yv;
-    }
-    fYY = fYY_par;
+	for (int32_t v = 0; v < V; v++)
+	{
+		const float* Yv   = Y + D * v;
+		float        H_Yv = 0.0;
+		for (size_t d = Q; d < D; d++)
+		{
+			H_Yv -= (u + c * Yv[d]) * log(u + c * Yv[d]);
+		}
+		fYY_par += VERT_WEIGHTS_(v) * H_Yv;
+	}
+	fYY = fYY_par;
 }
 
 void CP::set_components(int32_t rV, int32_t* comp_assign)
@@ -271,53 +289,61 @@ void CP::set_split_param(int32_t max_split_size, int32_t K, int split_iter_num, 
 
 void CP::set_min_comp_weight(float min_comp_weight)
 {
-    if (min_comp_weight < 0.0){
-        cerr << "Cut-pursuit d0 distance: min component weight parameter "
-            "should be positive (" << min_comp_weight << " given)." << endl;
-        exit(EXIT_FAILURE);
-    }
-    this->min_comp_weight = min_comp_weight;
+	if (min_comp_weight < 0.0)
+	{
+		cerr << "Cut-pursuit d0 distance: min component weight parameter "
+		        "should be positive ("
+		     << min_comp_weight << " given)." << endl;
+		exit(EXIT_FAILURE);
+	}
+	this->min_comp_weight = min_comp_weight;
 }
 
 float CP::fv(int32_t v, const float* Xv) const
-{ return VERT_WEIGHTS_(v)*distance(Y + D*v, Xv); }
+{
+	return VERT_WEIGHTS_(v) * distance(Y + D * v, Xv);
+}
 
 float CP::compute_f_sum() const
 {
-    float f = 0.0;
-    #pragma omp parallel for schedule(dynamic) NUM_THREADS(D*V, rV) \
-        reduction(+:f)
-    for (int32_t rv = 0; rv < rV; rv++){
-        float* rXv = rX + D*rv;
-        for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++){
-            f += fv(comp_list[i], rXv);
-        }
-    }
-    return f;
+	float f = 0.0;
+#pragma omp parallel for schedule(dynamic) NUM_THREADS(D* V, rV) \
+    reduction(+ : f)
+	for (int32_t rv = 0; rv < rV; rv++)
+	{
+		float* rXv = rX + D * rv;
+		for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++)
+		{
+			f += fv(comp_list[i], rXv);
+		}
+	}
+	return f;
 }
 
 float CP::compute_f() const
 {
-    return fXY == real_inf() ? compute_f_sum() - fYY : fXY - fYY;
+	return fXY == real_inf() ? compute_f_sum() - fYY : fXY - fYY;
 }
 
 float CP::compute_graph_d0() const
 {
-    float weighted_contour_length = 0.0;
-    #pragma omp parallel for schedule(static) NUM_THREADS(rE) \
-        reduction(+:weighted_contour_length)
-    for (int32_t re = 0; re < rE; re++){
-        weighted_contour_length += reduced_edge_weights[re];
-    }
-    return weighted_contour_length;
+	float weighted_contour_length = 0.0;
+#pragma omp parallel for schedule(static) NUM_THREADS(rE) \
+    reduction(+ : weighted_contour_length)
+	for (int32_t re = 0; re < rE; re++)
+	{
+		weighted_contour_length += reduced_edge_weights[re];
+	}
+	return weighted_contour_length;
 }
 
 float CP::compute_objective() const
-{ return compute_f() + compute_graph_d0(); } // f(x) + ||x||_d0
-
+{
+	return compute_f() + compute_graph_d0();
+} // f(x) + ||x||_d0
 
 void CP::set_parallel_param(int  max_num_threads,
-                                bool balance_parallel_split)
+                            bool balance_parallel_split)
 {
 	if (max_num_threads <= 0)
 	{
@@ -329,9 +355,9 @@ void CP::set_parallel_param(int  max_num_threads,
 	                               && compute_num_threads(split_complexity()) > 1;
 }
 
-int32_t CP::get_components(const int32_t**  comp_assign,
-                              const int32_t** first_vertex,
-                              const int32_t** comp_list) const
+int32_t CP::get_components(const int32_t** comp_assign,
+                           const int32_t** first_vertex,
+                           const int32_t** comp_list) const
 {
 	if (comp_assign)
 	{
@@ -350,30 +376,43 @@ int32_t CP::get_components(const int32_t**  comp_assign,
 
 void CP::solve_reduced_problem()
 {
-    free(comp_weights);
-    comp_weights = (float*) malloc_check(sizeof(float)*rV);
+	free(comp_weights);
+	comp_weights = (float*)malloc_check(sizeof(float) * rV);
 
-    for (int32_t rv = 0; rv < rV; rv++){
-        float* rXv = rX + D*rv;
-        comp_weights[rv] = 0.0;
-        for (size_t d = 0; d < D; d++){ rXv[d] = 0.0; }
-        for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++){
-            int32_t v = comp_list[i];
-            comp_weights[rv] += VERT_WEIGHTS_(v);
-            const float* Yv = Y + D*v;
-            for (size_t d = 0; d < D; d++){ rXv[d] += VERT_WEIGHTS_(v)*Yv[d]; }
-        }
-        if (comp_weights[rv] <= 0.0){
-            cerr << "Cut-pursuit d0 distance: nonpositive total component "
-                "weight; something went wrong." << endl;
-            exit(EXIT_FAILURE);
-        }
-        for (size_t d = 0; d < D; d++){ rXv[d] /= comp_weights[rv]; }
-    }
+	for (int32_t rv = 0; rv < rV; rv++)
+	{
+		float* rXv       = rX + D * rv;
+		comp_weights[rv] = 0.0;
+		for (size_t d = 0; d < D; d++)
+		{
+			rXv[d] = 0.0;
+		}
+		for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++)
+		{
+			int32_t v = comp_list[i];
+			comp_weights[rv] += VERT_WEIGHTS_(v);
+			const float* Yv = Y + D * v;
+			for (size_t d = 0; d < D; d++)
+			{
+				rXv[d] += VERT_WEIGHTS_(v) * Yv[d];
+			}
+		}
+		if (comp_weights[rv] <= 0.0)
+		{
+			cerr << "Cut-pursuit d0 distance: nonpositive total component "
+			        "weight; something went wrong."
+			     << endl;
+			exit(EXIT_FAILURE);
+		}
+		for (size_t d = 0; d < D; d++)
+		{
+			rXv[d] /= comp_weights[rv];
+		}
+	}
 }
 
 int32_t CP::get_reduced_graph(const int32_t** reduced_edges,
-                                  const float** reduced_edge_weights)
+                              const float**   reduced_edge_weights)
 {
 
 	if (reduced_edges)
@@ -405,7 +444,7 @@ int CP::cut_pursuit(bool init, CCCoreLib::GenericProgressCallback* progressCb)
 {
 	int    it    = 0;
 	double timer = 0.0;
-	float dif   = real_inf();
+	float  dif   = real_inf();
 
 	chrono::steady_clock::time_point start;
 	if (elapsed_time)
@@ -425,7 +464,7 @@ int CP::cut_pursuit(bool init, CCCoreLib::GenericProgressCallback* progressCb)
 		}
 	}
 
-	//progress notification (optional)
+	// progress notification (optional)
 	if (progressCb)
 	{
 		if (progressCb->textCanBeEdited())
@@ -733,7 +772,7 @@ void CP::compute_connected_components()
 	 **  we can thus compute them in parallel along previous components  **/
 
 	/* auxiliary variables for parallel region */
-	int32_t  saturated_comp_par = 0;
+	int32_t saturated_comp_par = 0;
 	int32_t saturated_vert_par = 0;
 	int32_t tmp_rV             = 0; // identify and count components, prevent overflow
 
@@ -951,7 +990,7 @@ void CP::compute_reduced_graph()
 		{
 			if (!is_bind(e) && EDGE_WEIGHTS_(e) > 0.0)
 			{
-				int32_t  rv = comp_assign[adj_vertices[e]];
+				int32_t rv = comp_assign[adj_vertices[e]];
 				int32_t ae = NO_EDGE;
 				if (ru < rv)
 				{ // count only undirected edges
@@ -998,7 +1037,7 @@ void CP::compute_reduced_graph()
 			{ // reach buffer size
 				bufsize += bufsize / 2 + 1;
 				reduced_edges        = (int32_t*)realloc_check(reduced_edges,
-				                                              sizeof(int32_t) * 2 * bufsize);
+                                                        sizeof(int32_t) * 2 * bufsize);
 				reduced_edge_weights = (float*)realloc_check(
 				    reduced_edge_weights, sizeof(float) * bufsize);
 			}
@@ -1011,9 +1050,9 @@ void CP::compute_reduced_graph()
 		     ae < first_active_edge[ru + 1];
 		     ae++)
 		{
-			float  edge_weight = edge_weights ? active_edge_weights[ae]
+			float   edge_weight = edge_weights ? active_edge_weights[ae]
 			                                   : homo_edge_weight;
-			int32_t  rv          = adj_components[ae];
+			int32_t rv          = adj_components[ae];
 			int32_t re          = reduced_edge_to[rv];
 			if (re == NO_EDGE)
 			{ // a new edge must be created
@@ -1021,7 +1060,7 @@ void CP::compute_reduced_graph()
 				{ // reach buffer size
 					bufsize += bufsize / 2 + 1;
 					reduced_edges        = (int32_t*)realloc_check(reduced_edges,
-					                                              sizeof(int32_t) * 2 * bufsize);
+                                                            sizeof(int32_t) * 2 * bufsize);
 					reduced_edge_weights = (float*)realloc_check(
 					    reduced_edge_weights, sizeof(float) * bufsize);
 				}
@@ -1051,9 +1090,9 @@ void CP::compute_reduced_graph()
 	if (bufsize > rE)
 	{
 		reduced_edges        = (int32_t*)realloc_check(reduced_edges,
-		                                              sizeof(int32_t) * 2 * rE);
+                                                sizeof(int32_t) * 2 * rE);
 		reduced_edge_weights = (float*)realloc_check(reduced_edge_weights,
-		                                              sizeof(float) * rE);
+		                                             sizeof(float) * rE);
 	}
 }
 
@@ -1140,7 +1179,7 @@ int CP::balance_split(int32_t& rV_big, int32_t& rV_new, int32_t*& first_vertex_b
 		int32_t  i                = 0;
 		for (int32_t rv = 0; rv < rV; rv++)
 		{
-			int32_t sort_rv       = sort_comp[rv];
+			int32_t sort_rv      = sort_comp[rv];
 			tmp_first_vertex[rv] = i;
 			for (int32_t j = first_vertex[sort_rv];
 			     j < first_vertex[sort_rv + 1];
@@ -1321,7 +1360,7 @@ int CP::balance_split(int32_t& rV_big, int32_t& rV_new, int32_t*& first_vertex_b
 	}
 
 	/**  first vertices of balanced components  **/
-	int32_t   rV_bal           = rV + rV_dif;
+	int32_t  rV_bal           = rV + rV_dif;
 	int32_t* first_vertex_bal = (int32_t*)
 	    malloc_check(sizeof(int32_t) * ADD1(rV_bal));
 
@@ -1455,8 +1494,8 @@ int32_t CP::remove_balance_separations(int32_t rV_new)
 void CP::revert_balance_split(int32_t rV_big, int32_t rV_new, int32_t* first_vertex_big)
 {
 	int32_t* first_vertex_bal = first_vertex;    // make clear which one is which
-	int32_t   rV_dif           = rV_new - rV_big; // additional components due to balancing
-	int32_t   rV_ini           = rV - rV_dif;     // number of components prior to balancing
+	int32_t  rV_dif           = rV_new - rV_big; // additional components due to balancing
+	int32_t  rV_ini           = rV - rV_dif;     // number of components prior to balancing
 
 	/**  remove duplicated component values and aggregate saturation **/
 	/* big components */
@@ -1533,30 +1572,32 @@ uintmax_t CP::split_complexity() const
 	if (K > 2)
 	{
 		complexity *= K;
-	}                             // K alternative labels
+	} // K alternative labels
 	complexity *= split_iter_num; // repeated
 	/* all split value computations (init and updates) */
 	complexity += split_values_complexity();
 	return complexity * (V - saturated_vert) / V; // account saturation linearly
 }
 
-void CP::set_split_value(Split_info& split_info, int32_t k,
-    int32_t v) const
+void CP::set_split_value(Split_info& split_info, int32_t k, int32_t v) const
 {
-    const float* Yv = Y + D*v;
-    float* sXk = split_info.sX + D*k;
-    for (size_t d = 0; d < D; d++){ sXk[d] = Yv[d]; }
+	const float* Yv  = Y + D * v;
+	float*       sXk = split_info.sX + D * k;
+	for (size_t d = 0; d < D; d++)
+	{
+		sXk[d] = Yv[d];
+	}
 }
 
-float CP::vert_split_cost(const Split_info& split_info, int32_t v,
-    int32_t k) const
-{ return fv(v, split_info.sX + D*k); }
-
-float CP::edge_split_cost(const Split_info& split_info, int32_t e,
-    int32_t lu, int32_t lv) const
+float CP::vert_split_cost(const Split_info& split_info, int32_t v, int32_t k) const
 {
-    (void)split_info;
-    return lu == lv ? 0.0 : EDGE_WEIGHTS_(e);
+	return fv(v, split_info.sX + D * k);
+}
+
+float CP::edge_split_cost(const Split_info& split_info, int32_t e, int32_t lu, int32_t lv) const
+{
+	(void)split_info;
+	return lu == lv ? 0.0 : EDGE_WEIGHTS_(e);
 }
 
 float CP::vert_split_cost(const Split_info& split_info, int32_t v, int32_t k, int32_t l) const
@@ -1571,36 +1612,47 @@ float CP::vert_split_cost(const Split_info& split_info, int32_t v, int32_t k, in
 
 void CP::update_split_info(Split_info& split_info) const
 {
-    int32_t rv = split_info.rv;
-    float* sX = split_info.sX;
-    float* total_weights = (float*)
-        malloc_check(sizeof(float)*split_info.K);
-    for (int32_t k = 0; k < split_info.K; k++){
-        total_weights[k] = 0.0;
-        float* sXk = sX + D*k;
-        for (size_t d = 0; d < D; d++){ sXk[d] = 0.0; }
-    }
-    for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++){
-        int32_t v = comp_list[i];
-        int32_t k = label_assign[v];
-        total_weights[k] += VERT_WEIGHTS_(v);
-        const float* Yv = Y + D*v;
-        float* sXk = sX + D*k;
-        for (size_t d = 0; d < D; d++){ sXk[d] += VERT_WEIGHTS_(v)*Yv[d]; }
-    }
-    int32_t kk = 0; // actual number of alternatives kept
-    for (int32_t k = 0; k < split_info.K; k++){
-        const float* sXk = sX + D*k;
-        float* sXkk = sX + D*kk;
-        if (total_weights[k]){
-            for (size_t d = 0; d < D; d++){
-                sXkk[d] = sXk[d]/total_weights[k];
-            }
-            kk++;
-        } // else no vertex assigned to k, discard this alternative
-    }
-    split_info.K = kk;
-    free(total_weights);
+	int32_t rv            = split_info.rv;
+	float*  sX            = split_info.sX;
+	float*  total_weights = (float*)
+	    malloc_check(sizeof(float) * split_info.K);
+	for (int32_t k = 0; k < split_info.K; k++)
+	{
+		total_weights[k] = 0.0;
+		float* sXk       = sX + D * k;
+		for (size_t d = 0; d < D; d++)
+		{
+			sXk[d] = 0.0;
+		}
+	}
+	for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++)
+	{
+		int32_t v = comp_list[i];
+		int32_t k = label_assign[v];
+		total_weights[k] += VERT_WEIGHTS_(v);
+		const float* Yv  = Y + D * v;
+		float*       sXk = sX + D * k;
+		for (size_t d = 0; d < D; d++)
+		{
+			sXk[d] += VERT_WEIGHTS_(v) * Yv[d];
+		}
+	}
+	int32_t kk = 0; // actual number of alternatives kept
+	for (int32_t k = 0; k < split_info.K; k++)
+	{
+		const float* sXk  = sX + D * k;
+		float*       sXkk = sX + D * kk;
+		if (total_weights[k])
+		{
+			for (size_t d = 0; d < D; d++)
+			{
+				sXkk[d] = sXk[d] / total_weights[k];
+			}
+			kk++;
+		} // else no vertex assigned to k, discard this alternative
+	}
+	split_info.K = kk;
+	free(total_weights);
 }
 
 CP::Split_info::Split_info(int32_t rv)
@@ -1621,21 +1673,21 @@ CP::Split_info CP::initialize_split_info(int32_t rv)
 	Split_info split_info(rv);
 
 	split_info.sX = (float*)malloc_check(sizeof(float) * D * K);
-	float* sX   = split_info.sX;
+	float* sX     = split_info.sX;
 
 	int32_t        comp_size    = first_vertex[rv + 1] - first_vertex[rv];
 	const int32_t* comp_list_rv = comp_list + first_vertex[rv];
 
 	/* split cost map and random device for k-means++ */
-	float*               near_cost = (float*)malloc_check(sizeof(float) * comp_size);
+	float*                near_cost = (float*)malloc_check(sizeof(float) * comp_size);
 	default_random_engine rand_gen; // default seed also enough for our purpose
 
 	/* best centroids, assignment and corresponding sum of split costs */
-	float   current_sum_cost = real_inf();
-	float   best_sum_cost    = real_inf();
-	int32_t   best_K           = K;
-	int32_t*  best_assign      = split_values_init_num == 1 ? nullptr : (int32_t*)malloc_check(sizeof(int32_t) * comp_size);
-	float* best_centroids   = split_values_init_num == 1 ? nullptr : (float*)malloc_check(sizeof(float) * D * K);
+	float    current_sum_cost = real_inf();
+	float    best_sum_cost    = real_inf();
+	int32_t  best_K           = K;
+	int32_t* best_assign      = split_values_init_num == 1 ? nullptr : (int32_t*)malloc_check(sizeof(int32_t) * comp_size);
+	float*   best_centroids   = split_values_init_num == 1 ? nullptr : (float*)malloc_check(sizeof(float) * D * K);
 
 	/**  kmeans ++  **/
 	for (int init = 0; init < split_values_init_num; init++)
@@ -1710,7 +1762,7 @@ CP::Split_info CP::initialize_split_info(int32_t rv)
 			for (int32_t i = 0; i < comp_size; i++)
 			{
 				int32_t v        = comp_list_rv[i];
-				float  min_cost = real_inf();
+				float   min_cost = real_inf();
 				for (int32_t k = 0; k < split_info.K; k++)
 				{
 					float c = vert_split_cost(split_info, v, k);
@@ -1731,7 +1783,7 @@ CP::Split_info CP::initialize_split_info(int32_t rv)
 			for (int32_t i = 0; i < comp_size; i++)
 			{
 				int32_t v = comp_list_rv[i];
-				int32_t  k = label_assign[v];
+				int32_t k = label_assign[v];
 				current_sum_cost += vert_split_cost(split_info, v, k);
 			}
 			if (current_sum_cost < best_sum_cost)
@@ -1809,7 +1861,7 @@ void CP::split_component(int32_t rv, Maxflow<int32_t, float>* maxflow)
 			for (int32_t i = 0; i < comp_size; i++)
 			{
 				int32_t v = comp_list_rv[i];
-				int32_t  l = split_info.K == 2 ? 0 : label_assign[v];
+				int32_t l = split_info.K == 2 ? 0 : label_assign[v];
 				/* unary cost: choosing alternative k against alternative l */
 				maxflow->terminal_capacity(i) = vert_split_cost(split_info, v, k, l);
 			}
@@ -1819,7 +1871,7 @@ void CP::split_component(int32_t rv, Maxflow<int32_t, float>* maxflow)
 			for (int32_t i = 0; i < comp_size; i++)
 			{
 				int32_t u  = comp_list_rv[i];
-				int32_t  lu = split_info.K == 2 ? 0 : label_assign[u];
+				int32_t lu = split_info.K == 2 ? 0 : label_assign[u];
 				for (int32_t e = first_edge[u]; e < first_edge[u + 1]; e++)
 				{
 					if (!is_bind(e))
@@ -1827,7 +1879,7 @@ void CP::split_component(int32_t rv, Maxflow<int32_t, float>* maxflow)
 						continue;
 					}
 					int32_t v  = adj_vertices[e];
-					int32_t  lv = split_info.K == 2 ? 0 : label_assign[v];
+					int32_t lv = split_info.K == 2 ? 0 : label_assign[v];
 					if (lu == lv)
 					{
 						/* special case useful for avoiding additional flow,
@@ -1874,7 +1926,7 @@ void CP::split_component(int32_t rv, Maxflow<int32_t, float>* maxflow)
 			for (int32_t i = 0; i < comp_size; i++)
 			{
 				int32_t v = comp_list_rv[i];
-				int32_t  l = maxflow->is_sink(i) ? k : split_info.K == 2 ? 0
+				int32_t l = maxflow->is_sink(i) ? k : split_info.K == 2 ? 0
 				                                                        : label_assign[v];
 				if (label_assign[v] != l)
 				{
@@ -1895,7 +1947,7 @@ void CP::split_component(int32_t rv, Maxflow<int32_t, float>* maxflow)
 int32_t CP::split()
 {
 	int32_t  activation = 0;
-	int32_t   rV_new, rV_big;
+	int32_t  rV_new, rV_big;
 	int32_t* first_vertex_big;
 	int      num_thrds = balance_split(rV_big, rV_new, first_vertex_big);
 	(void)num_thrds; /* prevent "unused variable" warning */
@@ -1953,7 +2005,7 @@ int32_t CP::split()
 		for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++)
 		{
 			int32_t v = comp_list[i];
-			int32_t  l = label_assign[v];
+			int32_t l = label_assign[v];
 			for (int32_t e = first_edge[v]; e < first_edge[v + 1]; e++)
 			{
 				if (is_bind(e) && l != label_assign[adj_vertices[e]])
@@ -2003,360 +2055,461 @@ int32_t CP::get_merge_chain_root(int32_t rv) const
 
 void CP::compute_merge_candidate(int32_t re)
 {
-    int32_t ru = reduced_edges_u(re);
-    int32_t rv = reduced_edges_v(re);
-    float edge_weight = reduced_edge_weights[re];
+	int32_t ru          = reduced_edges_u(re);
+	int32_t rv          = reduced_edges_v(re);
+	float   edge_weight = reduced_edge_weights[re];
 
-    float* rXu = rX + D*ru;
-    float* rXv = rX + D*rv;
-    float wru = comp_weights[ru]/(comp_weights[ru] + comp_weights[rv]);
-    float wrv = comp_weights[rv]/(comp_weights[ru] + comp_weights[rv]);
+	float* rXu = rX + D * ru;
+	float* rXv = rX + D * rv;
+	float  wru = comp_weights[ru] / (comp_weights[ru] + comp_weights[rv]);
+	float  wrv = comp_weights[rv] / (comp_weights[ru] + comp_weights[rv]);
 
-    float gain = edge_weight;
-    size_t Q = loss; // number of coordinates for quadratic part
+	float  gain = edge_weight;
+	size_t Q    = loss; // number of coordinates for quadratic part
 
-    if (Q != 0){
-        /* quadratic gain */
-        float gainQ = 0.0;
-        for (size_t d = 0; d < Q; d++){
-            gainQ -= COOR_WEIGHTS_(d)*(rXu[d] - rXv[d])*(rXu[d] - rXv[d]);
-        }
-        gain += comp_weights[ru]*wrv*gainQ;
-    }
+	if (Q != 0)
+	{
+		/* quadratic gain */
+		float gainQ = 0.0;
+		for (size_t d = 0; d < Q; d++)
+		{
+			gainQ -= COOR_WEIGHTS_(d) * (rXu[d] - rXv[d]) * (rXu[d] - rXv[d]);
+		}
+		gain += comp_weights[ru] * wrv * gainQ;
+	}
 
-    if (gain > 0.0 || comp_weights[ru] < min_comp_weight
-                    || comp_weights[rv] < min_comp_weight){
-        if (!merge_values[re]){
-            merge_values[re] = (float*) malloc_check(sizeof(float)*D);
-        }
-        float* value = merge_values[re];
-        for (size_t d = 0; d < D; d++){ value[d] = wru*rXu[d] + wrv*rXv[d]; }
+	if (gain > 0.0 || comp_weights[ru] < min_comp_weight
+	    || comp_weights[rv] < min_comp_weight)
+	{
+		if (!merge_values[re])
+		{
+			merge_values[re] = (float*)malloc_check(sizeof(float) * D);
+		}
+		float* value = merge_values[re];
+		for (size_t d = 0; d < D; d++)
+		{
+			value[d] = wru * rXu[d] + wrv * rXv[d];
+		}
 
-        if (Q != D){
-            /* smoothed Kullback-Leibler gain */
-            float gainKLu = 0.0, gainKLv = 0.0;
-            const float s = loss < 1.0 ? loss : eps;
-            const float c = 1.0 - s;
-            const float u = s/(D - Q);
-            for (size_t d = Q; d < D; d++){
-                float u_value_d = u + c*value[d];
-                float u_rXu_d = u + c*rXu[d];
-                float u_rXv_d = u + c*rXv[d];
-                gainKLu -= (u_rXu_d)*log(u_rXu_d/u_value_d);
-                gainKLv -= (u_rXv_d)*log(u_rXv_d/u_value_d);
-            }
-            gain += COOR_WEIGHTS_(Q)*
-                (comp_weights[ru]*gainKLu + comp_weights[rv]*gainKLv);
-        }
-    }
+		if (Q != D)
+		{
+			/* smoothed Kullback-Leibler gain */
+			float       gainKLu = 0.0, gainKLv = 0.0;
+			const float s = loss < 1.0 ? loss : eps;
+			const float c = 1.0 - s;
+			const float u = s / (D - Q);
+			for (size_t d = Q; d < D; d++)
+			{
+				float u_value_d = u + c * value[d];
+				float u_rXu_d   = u + c * rXu[d];
+				float u_rXv_d   = u + c * rXv[d];
+				gainKLu -= (u_rXu_d)*log(u_rXu_d / u_value_d);
+				gainKLv -= (u_rXv_d)*log(u_rXv_d / u_value_d);
+			}
+			gain += COOR_WEIGHTS_(Q) * (comp_weights[ru] * gainKLu + comp_weights[rv] * gainKLv);
+		}
+	}
 
-    merge_gains[re] = gain;
-    if (gain <= 0.0 && comp_weights[ru] >= min_comp_weight
-                     && comp_weights[rv] >= min_comp_weight){
-        delete_merge_candidate(re);
-    }
+	merge_gains[re] = gain;
+	if (gain <= 0.0 && comp_weights[ru] >= min_comp_weight
+	    && comp_weights[rv] >= min_comp_weight)
+	{
+		delete_merge_candidate(re);
+	}
 }
 
 size_t CP::merge_info_complexity() const
-{ return 2*D; }
+{
+	return 2 * D;
+}
 
 void CP::delete_merge_candidate(int32_t re)
-{ free(merge_values[re]); merge_values[re] = nullptr; }
+{
+	free(merge_values[re]);
+	merge_values[re] = nullptr;
+}
 
 int32_t CP::accept_merge_candidate(int32_t re)
 {
-    int32_t ru = reduced_edges_u(re);
-    int32_t rv = reduced_edges_v(re);
-    int32_t ro = merge_components(ru, rv); // ro is the root of the merge chain
-    float* rXo = rX + D*ro;
-    for (size_t d = 0; d < D; d++){ rXo[d] = merge_values[re][d]; }
-    delete_merge_candidate(re);
-    if (ro != ru){ rv = ru; } // rv now designates the non-root component
-    comp_weights[ro] += comp_weights[rv];
-    return ro;
+	int32_t ru  = reduced_edges_u(re);
+	int32_t rv  = reduced_edges_v(re);
+	int32_t ro  = merge_components(ru, rv); // ro is the root of the merge chain
+	float*  rXo = rX + D * ro;
+	for (size_t d = 0; d < D; d++)
+	{
+		rXo[d] = merge_values[re][d];
+	}
+	delete_merge_candidate(re);
+	if (ro != ru)
+	{
+		rv = ru;
+	} // rv now designates the non-root component
+	comp_weights[ro] += comp_weights[rv];
+	return ro;
 }
 
 float CP::compute_evolution() const
 {
-    float dif = 0.0;
-    for (int32_t rv = 0; rv < rV; rv++){
-        if (is_saturated[rv]){ continue; }
-        const float* rXv = rX + D*rv;
-        float distXX = 0.0;
-        if (loss != quadratic_loss()){
-            const size_t Q = loss; // number of coordinates for quadratic part
-            const float s = loss < 1.0 ? loss : eps;
-            const float c = 1.0 - s;
-            const float u = s/(D - Q);
-            for (size_t d = Q; d < D; d++){
-                distXX -= (u + c*rXv[d])*log(u + c*rXv[d]);
-            }
-            distXX *= COOR_WEIGHTS_(Q);
-        }
-        for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++){
-            int32_t v = comp_list[i];
-            const float* lrXv = last_rX + D*last_comp_assign[v];
-            dif += VERT_WEIGHTS_(v)*(distance(rXv, lrXv) - distXX);
-        }
-    }
-    float amp = compute_f();
-    return amp > eps ? dif/amp : dif/eps;
+	float dif = 0.0;
+	for (int32_t rv = 0; rv < rV; rv++)
+	{
+		if (is_saturated[rv])
+		{
+			continue;
+		}
+		const float* rXv    = rX + D * rv;
+		float        distXX = 0.0;
+		if (loss != quadratic_loss())
+		{
+			const size_t Q = loss; // number of coordinates for quadratic part
+			const float  s = loss < 1.0 ? loss : eps;
+			const float  c = 1.0 - s;
+			const float  u = s / (D - Q);
+			for (size_t d = Q; d < D; d++)
+			{
+				distXX -= (u + c * rXv[d]) * log(u + c * rXv[d]);
+			}
+			distXX *= COOR_WEIGHTS_(Q);
+		}
+		for (int32_t i = first_vertex[rv]; i < first_vertex[rv + 1]; i++)
+		{
+			int32_t      v    = comp_list[i];
+			const float* lrXv = last_rX + D * last_comp_assign[v];
+			dif += VERT_WEIGHTS_(v) * (distance(rXv, lrXv) - distXX);
+		}
+	}
+	float amp = compute_f();
+	return amp > eps ? dif / amp : dif / eps;
 }
 
 int32_t CP::compute_merge_chains()
 {
-    int32_t merge_count = 0;
+	int32_t merge_count = 0;
 
-    /* compute merge candidates in parallel */
-    merge_gains = (float*) malloc_check(sizeof(float)*rE);
-    merge_values = (float**) malloc_check(sizeof(float*)*rE);
-    for (int32_t re = 0; re < rE; re++){ merge_values[re] = nullptr; }
-    int32_t num_pos_candidates = 0, num_neg_candidates = 0;
-    #pragma omp parallel for NUM_THREADS(merge_info_complexity()*rE, rE) \
-        schedule(static) reduction(+:num_pos_candidates, num_neg_candidates)
-    for (int32_t re = 0; re < rE; re++){
-        int32_t ru = reduced_edges_u(re);
-        int32_t rv = reduced_edges_v(re);
-        if (ru == rv){ continue; }
-        compute_merge_candidate(re);
-        if (merge_values[re]){
-            if (merge_gains[re] > 0.0){ num_pos_candidates++; }
-            else{ num_neg_candidates++; }
-        }
-    }
+	/* compute merge candidates in parallel */
+	merge_gains  = (float*)malloc_check(sizeof(float) * rE);
+	merge_values = (float**)malloc_check(sizeof(float*) * rE);
+	for (int32_t re = 0; re < rE; re++)
+	{
+		merge_values[re] = nullptr;
+	}
+	int32_t num_pos_candidates = 0, num_neg_candidates = 0;
+#pragma omp parallel for NUM_THREADS(merge_info_complexity() * rE, rE) \
+    schedule(static) reduction(+ : num_pos_candidates, num_neg_candidates)
+	for (int32_t re = 0; re < rE; re++)
+	{
+		int32_t ru = reduced_edges_u(re);
+		int32_t rv = reduced_edges_v(re);
+		if (ru == rv)
+		{
+			continue;
+		}
+		compute_merge_candidate(re);
+		if (merge_values[re])
+		{
+			if (merge_gains[re] > 0.0)
+			{
+				num_pos_candidates++;
+			}
+			else
+			{
+				num_neg_candidates++;
+			}
+		}
+	}
 
-    if (!(num_pos_candidates || num_neg_candidates)){
-        free(merge_gains); free(merge_values);
-        return 0;
-    }
+	if (!(num_pos_candidates || num_neg_candidates))
+	{
+		free(merge_gains);
+		free(merge_values);
+		return 0;
+	}
 
-    /* local read-only access to merge_gains; useful for lambdas below,
-     * since one cannot directly capture member variables */
-    const float* _merge_gains = merge_gains;
+	/* local read-only access to merge_gains; useful for lambdas below,
+	 * since one cannot directly capture member variables */
+	const float* _merge_gains = merge_gains;
 
-    if (num_pos_candidates){
-    /**  merge candidates with positive gains;
-     **  these are important enough to be merged in decreasing gain order, and
-     **  to update surrounding merge candidates after each merge:
-     **  1) maintain candidates in a priority order on the gain
-     **  2) maintain access to all reduced edges involving a given vertex, and
-     **  to their potential corresponding candidate in the priority order;
-     **  because of 2), the best choice for 1) is a binary search tree **/
+	if (num_pos_candidates)
+	{
+		/**  merge candidates with positive gains;
+		 **  these are important enough to be merged in decreasing gain order, and
+		 **  to update surrounding merge candidates after each merge:
+		 **  1) maintain candidates in a priority order on the gain
+		 **  2) maintain access to all reduced edges involving a given vertex, and
+		 **  to their potential corresponding candidate in the priority order;
+		 **  because of 2), the best choice for 1) is a binary search tree **/
 
-    /* 1) binary search tree on the gain */
-    auto compare_candidates = [_merge_gains] (int32_t mc1, int32_t mc2) -> bool
-        { return _merge_gains[mc1] > _merge_gains[mc2] ||
-            /* ensure unique identification of merge candidates */
-            (_merge_gains[mc1] == _merge_gains[mc2] && mc1 < mc2); };
-    set<int32_t, decltype(compare_candidates)>
-        candidates_queue(compare_candidates);
-    for (int32_t re = 0; re < rE; re++){
-        if (merge_values[re] && merge_gains[re] > 0.0){
-            candidates_queue.insert(re);
-        }
-    }
+		/* 1) binary search tree on the gain */
+		auto compare_candidates = [_merge_gains](int32_t mc1, int32_t mc2) -> bool
+		{ return _merge_gains[mc1] > _merge_gains[mc2] ||
+			     /* ensure unique identification of merge candidates */
+			     (_merge_gains[mc1] == _merge_gains[mc2] && mc1 < mc2); };
+		set<int32_t, decltype(compare_candidates)>
+		    candidates_queue(compare_candidates);
+		for (int32_t re = 0; re < rE; re++)
+		{
+			if (merge_values[re] && merge_gains[re] > 0.0)
+			{
+				candidates_queue.insert(re);
+			}
+		}
 
-    /* 2) linked list structure for updating reduced graph while merging */
-    /* - given a component, we need access to the list of merge candidates
-     * whose corresponding reduced edge involves the considered component;
-     * - to that purpose, we maintain for each component a linked list of such
-     * merge candidates; we call "merge candidate cell" the data structure with
-     * the merge candidate identifier and the access to the next cell in such a
-     * linked list;
-     * - each active merge candidates is thus referenced in two such cells: one
-     * within both lists of starting and ending components of the corresponding
-     * reduced edge;
-     * - one can thus compact information mapping unequivocally each merge
-     * candidate mc to merge candidate cells identifiers 2*mc and 2*mc + 1;
-     * conversely, the merge candidate of a cell mcc is mcc/2
-     * - the link list structure can thus be maintained with the following
-     * tables:
-     *  first_candidate_cell[ru] is the index of the first merge candidate
-     *      cell of the list of adjacent candidates for component ru
-     *  next_candidate_cell[mcc] is the index of the merge candidate cell
-     *      that comes after mcc within the list containing it
-     */
-    typedef size_t Cell_id;
-    #define EMPTY_CELL (std::numeric_limits<Cell_id>::max())
-    Cell_id* first_candidate_cell = (Cell_id*)
-        malloc_check(sizeof(Cell_id)*rV);
-    Cell_id* next_candidate_cell = (Cell_id*)
-        malloc_check(sizeof(Cell_id)*2*rE);
-    for (int32_t rv = 0; rv < rV; rv++){
-        first_candidate_cell[rv] = EMPTY_CELL;
-    }
-    for (Cell_id mcc = 0; mcc < ((Cell_id) 2)*rE; mcc++){
-        next_candidate_cell[mcc] = EMPTY_CELL;
-    }
-    #define GET_REDUCED_EDGE(mcc) (*mcc/2)
-    #define FIRST_CELL(mcc, rv) (mcc = &first_candidate_cell[rv])
-    #define NEXT_CELL(mcc) (mcc = &next_candidate_cell[*mcc])
-    #define DELETE_CELL(mcc) (*mcc = next_candidate_cell[*mcc])
-    #define IS_EMPTY(mcc) (*mcc == EMPTY_CELL)
+		/* 2) linked list structure for updating reduced graph while merging */
+		/* - given a component, we need access to the list of merge candidates
+		 * whose corresponding reduced edge involves the considered component;
+		 * - to that purpose, we maintain for each component a linked list of such
+		 * merge candidates; we call "merge candidate cell" the data structure with
+		 * the merge candidate identifier and the access to the next cell in such a
+		 * linked list;
+		 * - each active merge candidates is thus referenced in two such cells: one
+		 * within both lists of starting and ending components of the corresponding
+		 * reduced edge;
+		 * - one can thus compact information mapping unequivocally each merge
+		 * candidate mc to merge candidate cells identifiers 2*mc and 2*mc + 1;
+		 * conversely, the merge candidate of a cell mcc is mcc/2
+		 * - the link list structure can thus be maintained with the following
+		 * tables:
+		 *  first_candidate_cell[ru] is the index of the first merge candidate
+		 *      cell of the list of adjacent candidates for component ru
+		 *  next_candidate_cell[mcc] is the index of the merge candidate cell
+		 *      that comes after mcc within the list containing it
+		 */
+		typedef size_t Cell_id;
+#define EMPTY_CELL (std::numeric_limits<Cell_id>::max())
+		Cell_id* first_candidate_cell = (Cell_id*)
+		    malloc_check(sizeof(Cell_id) * rV);
+		Cell_id* next_candidate_cell = (Cell_id*)
+		    malloc_check(sizeof(Cell_id) * 2 * rE);
+		for (int32_t rv = 0; rv < rV; rv++)
+		{
+			first_candidate_cell[rv] = EMPTY_CELL;
+		}
+		for (Cell_id mcc = 0; mcc < ((Cell_id)2) * rE; mcc++)
+		{
+			next_candidate_cell[mcc] = EMPTY_CELL;
+		}
+#define GET_REDUCED_EDGE(mcc) (*mcc / 2)
+#define FIRST_CELL(mcc, rv) (mcc = &first_candidate_cell[rv])
+#define NEXT_CELL(mcc) (mcc = &next_candidate_cell[*mcc])
+#define DELETE_CELL(mcc) (*mcc = next_candidate_cell[*mcc])
+#define IS_EMPTY(mcc) (*mcc == EMPTY_CELL)
 
-    /* construct the linked list structure;
-     * last_candidate_cell[ru] is the index of the last merge candidate cell
-     *      of the list of adjacent candidates for component ru;
-     *      useful only for constructing the list in linear time */
-    Cell_id* last_candidate_cell = (Cell_id*)
-        malloc_check(sizeof(Cell_id)*rV);
-    for (int32_t rv = 0; rv < rV; rv++){ last_candidate_cell[rv] = EMPTY_CELL; }
-    for (int32_t re = 0; re < rE; re++){
-        int32_t ru = reduced_edges_u(re);
-        int32_t rv = reduced_edges_v(re);
-        if (ru == rv){ continue; }
-        #define INSERT_CELL(rv, mcc) \
-            if (last_candidate_cell[rv] == EMPTY_CELL){ \
-                first_candidate_cell[rv] = mcc; \
-                last_candidate_cell[rv] = mcc; \
-            }else{ \
-                next_candidate_cell[last_candidate_cell[rv]] = mcc; \
-                last_candidate_cell[rv] = mcc; \
-            }
-        Cell_id mcc_ru = ((Cell_id) 2)*re, mcc_rv = ((Cell_id) 2)*re + 1;
-        INSERT_CELL(ru, mcc_ru); INSERT_CELL(rv, mcc_rv);
-    }
-    free(last_candidate_cell);
+		/* construct the linked list structure;
+		 * last_candidate_cell[ru] is the index of the last merge candidate cell
+		 *      of the list of adjacent candidates for component ru;
+		 *      useful only for constructing the list in linear time */
+		Cell_id* last_candidate_cell = (Cell_id*)
+		    malloc_check(sizeof(Cell_id) * rV);
+		for (int32_t rv = 0; rv < rV; rv++)
+		{
+			last_candidate_cell[rv] = EMPTY_CELL;
+		}
+		for (int32_t re = 0; re < rE; re++)
+		{
+			int32_t ru = reduced_edges_u(re);
+			int32_t rv = reduced_edges_v(re);
+			if (ru == rv)
+			{
+				continue;
+			}
+#define INSERT_CELL(rv, mcc) \
+	if (last_candidate_cell[rv] == EMPTY_CELL) \
+	{ \
+		first_candidate_cell[rv] = mcc; \
+		last_candidate_cell[rv]  = mcc; \
+	} \
+	else \
+	{ \
+		next_candidate_cell[last_candidate_cell[rv]] = mcc; \
+		last_candidate_cell[rv]                      = mcc; \
+	}
+			Cell_id mcc_ru = ((Cell_id)2) * re, mcc_rv = ((Cell_id)2) * re + 1;
+			INSERT_CELL(ru, mcc_ru);
+			INSERT_CELL(rv, mcc_rv);
+		}
+		free(last_candidate_cell);
 
-    /* iterative merge following the above order */
-    while (!candidates_queue.empty()){
-        typename set<int32_t>::iterator candidate = candidates_queue.begin();
-        int32_t re = *candidate;
-        int32_t ru = reduced_edges_u(re);
-        int32_t rv = reduced_edges_v(re);
+		/* iterative merge following the above order */
+		while (!candidates_queue.empty())
+		{
+			typename set<int32_t>::iterator candidate = candidates_queue.begin();
+			int32_t                         re        = *candidate;
+			int32_t                         ru        = reduced_edges_u(re);
+			int32_t                         rv        = reduced_edges_v(re);
 
-        /**  accept the merge and remove from the queue  **/
-        int32_t ro = accept_merge_candidate(re); // merge ru and rv
-        if (ro != ru){ rv = ru; ru = ro; } // makes sure ru is the root
-        candidates_queue.erase(candidate);
-        merge_count++;
+			/**  accept the merge and remove from the queue  **/
+			int32_t ro = accept_merge_candidate(re); // merge ru and rv
+			if (ro != ru)
+			{
+				rv = ru;
+				ru = ro;
+			} // makes sure ru is the root
+			candidates_queue.erase(candidate);
+			merge_count++;
 
-        /**  update reduced graph structure and adjacent merge candidates  **/
-        Cell_id *mcc_ru, *mcc_rv;
+			/**  update reduced graph structure and adjacent merge candidates  **/
+			Cell_id *mcc_ru, *mcc_rv;
 
-        /* first pass on the list of rv: cleanup deleted candidates, remove
-         * current merging candidate, update vertices by replacing rv by ru */
-        FIRST_CELL(mcc_rv, rv);
-        while (!IS_EMPTY(mcc_rv)){
-            int32_t re_rv = (int32_t) GET_REDUCED_EDGE(mcc_rv);
-            if (!reduced_edge_weights[re_rv]){ DELETE_CELL(mcc_rv); continue; }
-            int32_t end_re_rv;
-            if (reduced_edges_u(re_rv) == rv){
-                reduced_edges_u(re_rv) = ru;
-                end_re_rv = reduced_edges_v(re_rv);
-            }else{
-                reduced_edges_v(re_rv) = ru;
-                end_re_rv = reduced_edges_u(re_rv);
-            }
-            if (end_re_rv == ru){ DELETE_CELL(mcc_rv); continue; }
-            NEXT_CELL(mcc_rv);
-        }
+			/* first pass on the list of rv: cleanup deleted candidates, remove
+			 * current merging candidate, update vertices by replacing rv by ru */
+			FIRST_CELL(mcc_rv, rv);
+			while (!IS_EMPTY(mcc_rv))
+			{
+				int32_t re_rv = (int32_t)GET_REDUCED_EDGE(mcc_rv);
+				if (!reduced_edge_weights[re_rv])
+				{
+					DELETE_CELL(mcc_rv);
+					continue;
+				}
+				int32_t end_re_rv;
+				if (reduced_edges_u(re_rv) == rv)
+				{
+					reduced_edges_u(re_rv) = ru;
+					end_re_rv              = reduced_edges_v(re_rv);
+				}
+				else
+				{
+					reduced_edges_v(re_rv) = ru;
+					end_re_rv              = reduced_edges_u(re_rv);
+				}
+				if (end_re_rv == ru)
+				{
+					DELETE_CELL(mcc_rv);
+					continue;
+				}
+				NEXT_CELL(mcc_rv);
+			}
 
-        /* cleanup deleted candidates and delete current merging candidate from
-         * ru list, and search candidates adjacent to both ru and rv with same
-         * end vertex;
-         * NOTA: bilinear time cost in orders of merging components cannot be
-         * avoided; in particular, ordering lists by end vertex identifiers
-         * would require reordering of all adjacent candidates of rv, bilinear
-         * in order of rv and sum of orders of its adjacent candidates
-         * NOTA: might be done in parallel along ru list, but current merging
-         * candidate must be removed before, and might not be worth it */
-        FIRST_CELL(mcc_ru, ru);
-        while (!IS_EMPTY(mcc_ru)){
-            int32_t re_ru = (int32_t) GET_REDUCED_EDGE(mcc_ru);
-            if (!reduced_edge_weights[re_ru]){ DELETE_CELL(mcc_ru); continue; }
-            int32_t end_re_ru = reduced_edges_u(re_ru) == ru ?
-                reduced_edges_v(re_ru) : reduced_edges_u(re_ru);
-            if (end_re_ru == ru){ DELETE_CELL(mcc_ru); continue; }
-            for (FIRST_CELL(mcc_rv, rv); !IS_EMPTY(mcc_rv); NEXT_CELL(mcc_rv)){
-                int32_t re_rv = (int32_t) GET_REDUCED_EDGE(mcc_rv);
-                int32_t end_re_rv = reduced_edges_u(re_rv) == ru ?
-                    reduced_edges_v(re_rv) : reduced_edges_u(re_rv);
-                if (end_re_ru == end_re_rv){
-                    reduced_edge_weights[re_ru] += reduced_edge_weights[re_rv];
-                    reduced_edge_weights[re_rv] = 0.0; // sum must be constant
-                    if (merge_gains[re_rv] > 0.0){ /* remove from queue */
-                        candidate = candidates_queue.find(re_rv);
-                        candidate = candidates_queue.erase(candidate);
-                        merge_gains[re_rv] = 0.0;
-                    }
-                    delete_merge_candidate(re_rv);
-                    DELETE_CELL(mcc_rv);
-                    /* NOTA: sister candidate cell for re_rv still exists in
-                     * the list of adjacent candidates of end_re_rv; but this
-                     * situation is flagged with zero reduced edge weight */
-                    break;
-                }
-            }
-            NEXT_CELL(mcc_ru);
-        }
+			/* cleanup deleted candidates and delete current merging candidate from
+			 * ru list, and search candidates adjacent to both ru and rv with same
+			 * end vertex;
+			 * NOTA: bilinear time cost in orders of merging components cannot be
+			 * avoided; in particular, ordering lists by end vertex identifiers
+			 * would require reordering of all adjacent candidates of rv, bilinear
+			 * in order of rv and sum of orders of its adjacent candidates
+			 * NOTA: might be done in parallel along ru list, but current merging
+			 * candidate must be removed before, and might not be worth it */
+			FIRST_CELL(mcc_ru, ru);
+			while (!IS_EMPTY(mcc_ru))
+			{
+				int32_t re_ru = (int32_t)GET_REDUCED_EDGE(mcc_ru);
+				if (!reduced_edge_weights[re_ru])
+				{
+					DELETE_CELL(mcc_ru);
+					continue;
+				}
+				int32_t end_re_ru = reduced_edges_u(re_ru) == ru ? reduced_edges_v(re_ru) : reduced_edges_u(re_ru);
+				if (end_re_ru == ru)
+				{
+					DELETE_CELL(mcc_ru);
+					continue;
+				}
+				for (FIRST_CELL(mcc_rv, rv); !IS_EMPTY(mcc_rv); NEXT_CELL(mcc_rv))
+				{
+					int32_t re_rv     = (int32_t)GET_REDUCED_EDGE(mcc_rv);
+					int32_t end_re_rv = reduced_edges_u(re_rv) == ru ? reduced_edges_v(re_rv) : reduced_edges_u(re_rv);
+					if (end_re_ru == end_re_rv)
+					{
+						reduced_edge_weights[re_ru] += reduced_edge_weights[re_rv];
+						reduced_edge_weights[re_rv] = 0.0; // sum must be constant
+						if (merge_gains[re_rv] > 0.0)
+						{ /* remove from queue */
+							candidate          = candidates_queue.find(re_rv);
+							candidate          = candidates_queue.erase(candidate);
+							merge_gains[re_rv] = 0.0;
+						}
+						delete_merge_candidate(re_rv);
+						DELETE_CELL(mcc_rv);
+						/* NOTA: sister candidate cell for re_rv still exists in
+						 * the list of adjacent candidates of end_re_rv; but this
+						 * situation is flagged with zero reduced edge weight */
+						break;
+					}
+				}
+				NEXT_CELL(mcc_ru);
+			}
 
-        /* at that point, mcc_ru is the last (empty) cell of the ru list;
-         * concatenate adjacent candidate list of rv after the one of ru  */
-        *mcc_ru = first_candidate_cell[rv];
+			/* at that point, mcc_ru is the last (empty) cell of the ru list;
+			 * concatenate adjacent candidate list of rv after the one of ru  */
+			*mcc_ru = first_candidate_cell[rv];
 
-        /* update all adjacent candidates */
-        for (FIRST_CELL(mcc_ru, ru); !IS_EMPTY(mcc_ru); NEXT_CELL(mcc_ru)){
-            int32_t re = (int32_t) GET_REDUCED_EDGE(mcc_ru);
-            if (merge_gains[re] > 0.0){ /* already in the queue */
-                candidate = candidates_queue.find(re);
-                candidate = candidates_queue.erase(candidate);
-            }else{
-                candidate = candidates_queue.end();
-            }
-            compute_merge_candidate(re);
-            if (merge_gains[re] > 0.0){
-                candidates_queue.insert(candidate, re);
-            }
-        }
-    } // end while candidates queue not empty
+			/* update all adjacent candidates */
+			for (FIRST_CELL(mcc_ru, ru); !IS_EMPTY(mcc_ru); NEXT_CELL(mcc_ru))
+			{
+				int32_t re = (int32_t)GET_REDUCED_EDGE(mcc_ru);
+				if (merge_gains[re] > 0.0)
+				{ /* already in the queue */
+					candidate = candidates_queue.find(re);
+					candidate = candidates_queue.erase(candidate);
+				}
+				else
+				{
+					candidate = candidates_queue.end();
+				}
+				compute_merge_candidate(re);
+				if (merge_gains[re] > 0.0)
+				{
+					candidates_queue.insert(candidate, re);
+				}
+			}
+		} // end while candidates queue not empty
 
-    free(first_candidate_cell); free(next_candidate_cell);
-    } // end if num_pos_candidates
+		free(first_candidate_cell);
+		free(next_candidate_cell);
+	} // end if num_pos_candidates
 
-    if (num_neg_candidates){
-    /**  merge candidates with negative gains;
-     **  these are less important, no update of adajacent candidates;
-     **  only sort once and merge in that order **/
-    int32_t bufsize = num_neg_candidates;
-    int32_t* neg_candidates = (int32_t*) malloc_check(sizeof(int32_t)*bufsize);
-    num_neg_candidates = 0; // recounting
-    for (int32_t re = 0; re < rE; re++){
-        if (merge_values[re]){
-            if (num_neg_candidates == bufsize){
-                bufsize += bufsize/2 + 1;
-                neg_candidates = (int32_t*) realloc_check(neg_candidates,
-                    sizeof(int32_t)*bufsize);
-            }
-            neg_candidates[num_neg_candidates++] = re;
-        }
-    }
-    sort(neg_candidates, neg_candidates + num_neg_candidates,
-        [_merge_gains] (int32_t re1, int32_t re2) -> bool
-        { return _merge_gains[re1] > _merge_gains[re2]; });
-    for (int32_t mc = 0; mc < num_neg_candidates; mc++){
-        int32_t re = neg_candidates[mc];
-        /* ensure candidate info is up-to-date */
-        int32_t ru = get_merge_chain_root(reduced_edges_u(re));
-        int32_t rv = get_merge_chain_root(reduced_edges_v(re));
-        if (ru == rv){
-            delete_merge_candidate(re);
-        }else{
-            reduced_edges_u(re) = ru;
-            reduced_edges_v(re) = rv;
-            compute_merge_candidate(re);
-            if (merge_values[re]){
-                accept_merge_candidate(re);
-                merge_count++;
-            }
-        }
-    }
+	if (num_neg_candidates)
+	{
+		/**  merge candidates with negative gains;
+		 **  these are less important, no update of adajacent candidates;
+		 **  only sort once and merge in that order **/
+		int32_t  bufsize        = num_neg_candidates;
+		int32_t* neg_candidates = (int32_t*)malloc_check(sizeof(int32_t) * bufsize);
+		num_neg_candidates      = 0; // recounting
+		for (int32_t re = 0; re < rE; re++)
+		{
+			if (merge_values[re])
+			{
+				if (num_neg_candidates == bufsize)
+				{
+					bufsize += bufsize / 2 + 1;
+					neg_candidates = (int32_t*)realloc_check(neg_candidates,
+					                                         sizeof(int32_t) * bufsize);
+				}
+				neg_candidates[num_neg_candidates++] = re;
+			}
+		}
+		sort(neg_candidates, neg_candidates + num_neg_candidates, [_merge_gains](int32_t re1, int32_t re2) -> bool
+		     { return _merge_gains[re1] > _merge_gains[re2]; });
+		for (int32_t mc = 0; mc < num_neg_candidates; mc++)
+		{
+			int32_t re = neg_candidates[mc];
+			/* ensure candidate info is up-to-date */
+			int32_t ru = get_merge_chain_root(reduced_edges_u(re));
+			int32_t rv = get_merge_chain_root(reduced_edges_v(re));
+			if (ru == rv)
+			{
+				delete_merge_candidate(re);
+			}
+			else
+			{
+				reduced_edges_u(re) = ru;
+				reduced_edges_v(re) = rv;
+				compute_merge_candidate(re);
+				if (merge_values[re])
+				{
+					accept_merge_candidate(re);
+					merge_count++;
+				}
+			}
+		}
 
-    free(neg_candidates);
-    } // end if num_neg_candidates
+		free(neg_candidates);
+	} // end if num_neg_candidates
 
-    free(merge_gains); free(merge_values);
-    return merge_count;
+	free(merge_gains);
+	free(merge_values);
+	return merge_count;
 }
 
 int32_t CP::merge_components(int32_t ru, int32_t rv)
@@ -2366,8 +2519,8 @@ int32_t CP::merge_components(int32_t ru, int32_t rv)
 	if (ru > rv)
 	{
 		int32_t tmp = ru;
-		ru         = rv;
-		rv         = tmp;
+		ru          = rv;
+		rv          = tmp;
 	}
 	/* link both chains; update leaf of the merge chain; update root info */
 	merge_chains_next[merge_chains_leaf[ru]] = rv;
@@ -2451,7 +2604,7 @@ int32_t CP::merge()
 			{
 				continue;
 			}
-			int32_t last_rv   = last_comp_assign[comp_list[first_vertex[rv]]];
+			int32_t last_rv  = last_comp_assign[comp_list[first_vertex[rv]]];
 			is_saturated[rv] = saturation_flag[last_rv] != NOT_SATURATED;
 		}
 	}
@@ -2473,7 +2626,7 @@ int32_t CP::merge()
 	/* auxiliary components lists */
 	int32_t* tmp_comp_list = (int32_t*)malloc_check(sizeof(int32_t) * V);
 
-	int32_t  rn = 0; // component number
+	int32_t rn = 0; // component number
 	int32_t i  = 0; // index in the final comp_list
 	/* each current component is assigned its final component;
 	 * this can use the same storage as merge chains root, because the only
@@ -2501,7 +2654,7 @@ int32_t CP::merge()
 		}
 		/* run along the merge chain */
 		int32_t first = i; // holds index of first vertex of the component
-		int32_t  rv    = ru;
+		int32_t rv    = ru;
 		while (rv != CHAIN_END)
 		{
 			final_comp[rv] = rn;
@@ -2528,7 +2681,7 @@ int32_t CP::merge()
 	/* finalize and shrink arrays to fit the reduced number of components */
 	first_vertex[rV = rn] = V;
 	first_vertex          = (int32_t*)realloc_check(first_vertex,
-	                                                sizeof(int32_t) * (rV + 1));
+                                           sizeof(int32_t) * (rV + 1));
 	rX                    = (float*)realloc_check(rX, sizeof(float) * D * rV);
 	is_saturated          = (bool*)realloc_check(is_saturated, sizeof(bool) * rV);
 
@@ -2580,8 +2733,8 @@ int32_t CP::merge()
 		if (ru > rv)
 		{
 			int32_t tmp = ru;
-			ru         = rv;
-			rv         = tmp;
+			ru          = rv;
+			rv          = tmp;
 		}
 		reduced_edges_u(re) = ru;
 		reduced_edges_v(re) = rv;
@@ -2604,9 +2757,9 @@ int32_t CP::merge()
 
 	/* remove duplicates and accumulate edge weights */
 	int32_t* new_red_edg       = (int32_t*)malloc_check(sizeof(int32_t) * 2 * rE);
-	float* new_red_edg_wghts = (float*)malloc_check(sizeof(float) * rE);
-	int32_t re                = 0;
-	int32_t final_re          = 0;
+	float*   new_red_edg_wghts = (float*)malloc_check(sizeof(float) * rE);
+	int32_t  re                = 0;
+	int32_t  final_re          = 0;
 	while (re < rE)
 	{
 		/* draw next edge */
@@ -2653,7 +2806,7 @@ int32_t CP::merge()
 	rE                   = final_re;
 	reduced_edges        = (int32_t*)realloc_check(new_red_edg, sizeof(int32_t) * 2 * rE);
 	reduced_edge_weights = (float*)realloc_check(new_red_edg_wghts,
-	                                              sizeof(float) * rE);
+	                                             sizeof(float) * rE);
 
 	return deactivation;
 }
