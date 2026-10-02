@@ -1,15 +1,6 @@
 
 #include <Partition.h>
 
-// Local
-#include <Graph.h>
-#include <CutPursuit.h>
-
-// CCCoreLib
-#include <GenericIndexedCloudPersist.h>
-#include <GenericProgressCallback.h>
-#include <DgmOctree.h>
-
 using namespace PCP;
 
 int Partition::labelCutPursuitComponents(CCCoreLib::GenericIndexedCloudPersist* theCloud,

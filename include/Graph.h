@@ -43,10 +43,16 @@
 #pragma once
 #include <cstddef>
 
+// CCCoreLib
+#include <GenericIndexedCloudPersist.h>
+#include <GenericProgressCallback.h>
+#include <DgmOctree.h>
+
 namespace PCP
 {
-    class GenericIndexedCloudPersist;
-    class DgmOctree;
+    using CCCoreLib::GenericIndexedCloudPersist;
+    using CCCoreLib::DgmOctree;
+    using CCCoreLib::GenericProgressCallback;
 
     class Graph
     {

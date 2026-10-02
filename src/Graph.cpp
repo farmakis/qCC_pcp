@@ -53,7 +53,7 @@ void Graph::computeEdges(int32_t knn,
             progressCb->update(0);
             progressCb->start();
         }
-        NormalizedProgress nprogress(progressCb, m_N, 100);
+        CCCoreLib::NormalizedProgress nprogress(progressCb, m_N, 100);
 
         // parallel compute pre-thread edges
         int numThreads = omp_get_max_threads();

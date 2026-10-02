@@ -12,15 +12,12 @@
  *===========================================================================*/
 #pragma once
 
+// system
 #include <cstdint>
 #include <vector>
 
-namespace CCCoreLib
-{
-	class GenericIndexedCloudPersist;
-	class GenericProgressCallback;
-	class DgmOctree;
-}
+// Local
+#include <Graph.h>
 
 namespace PCP
 {
